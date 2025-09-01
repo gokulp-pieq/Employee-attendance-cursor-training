@@ -1,0 +1,89 @@
+---
+alwaysApply: true
+
+description: 1. Project Overview
+
+Frontend: React 19 + TypeScript, built with Vite.
+
+Styling: TailwindCSS 4.1.
+
+Backend: Dropwizard 4.0.15 with Kotlin 2.1.21.
+
+Database: PostgreSQL, using JDBI3 (3.45.1) and HikariCP (5.1.0).
+
+JSON Handling: Jackson Kotlin module (2.15.0) and JavaTimeModule.
+
+Build: Gradle, JVM 21.
+
+Purpose: Attendance system with Login, Check-In, Check-Out ,CRUD functionalities.
+
+2. Coding & Style Guidelines
+
+Use React functional components with const declarations; avoid function declarations.
+
+Use TypeScript strictly for components, props, state, and functions.
+
+Use TailwindCSS classes only; avoid inline styles or separate CSS.
+
+Use early returns in functions for readability.
+
+Name event handlers with handle prefix (e.g., handleClick, handleSubmit).
+
+Prefer class: syntax over ternary in className.
+
+Include accessibility features: aria-label, tabIndex, onKeyDown, onClick.
+
+Reuse components whenever possible; follow DRY principle.
+
+Avoid placeholders, TODOs, console.log, or incomplete code.
+
+Focus on readable, maintainable code over performance.
+
+Include proper imports in all generated code.
+
+Handle all backend errors gracefully and show user-friendly messages.
+
+3. Frontend Rules
+
+Use AuthContext for global user authentication state.
+
+Input fields can use Cursor AI suggestions (autocomplete) while maintaining accessibility.
+
+Buttons, inputs, forms, and interactive components must be reusable, accessible, and Tailwind-styled.
+
+Maintain profer folder structure.
+
+Use axios with proper error handling for API calls.
+
+4. Backend Rules
+
+Dropwizard 4.0.15 with Kotlin 2.1.21.
+
+API endpoints: /sign up , /login, /checkin, /checkout, also for crud operations.
+
+Use JDBI3 (3.45.1) and HikariCP (5.1.0) for database connections.
+
+Use Jackson Kotlin module (2.15.0) and JavaTimeModule for JSON and date/time serialization.
+
+Endpoints must handle errors properly and return meaningful messages.
+
+Follow Kotlin & Dropwizard best practices as defined in Gradle build.
+
+5. General Project Rules
+
+Avoid repeating code; use reusable hooks, components, or context.
+
+Ensure keyboard navigation works for all interactive elements.
+
+Validate all forms and inputs before API calls.
+
+All suggested code must be fully functional, with no missing pieces.
+
+Follow strict TypeScript checking in frontend.
+
+Always clarify your doubts on uncleared requirements, don't go with your assumption.
+
+Use Tailwind transitions and accessible UI components for better ux.
+globs:
+alwaysApply: true
+---
