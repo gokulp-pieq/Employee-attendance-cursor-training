@@ -14,6 +14,7 @@ const Dashboard = () => {
     activeRecord: null,
     totalCheckIns: 0
   });
+  const [totalWorkingHours, setTotalWorkingHours] = useState('--:--');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -85,11 +86,33 @@ const Dashboard = () => {
         }
         setTodayStatus(response.data);
         
-        // Also fetch working hours for today
-        await updateWorkingHours(empId);
+        // Fetch working hours for today
+        await fetchWorkingHours(empId);
       }
     } catch (error) {
       console.error('Error fetching today status:', error);
+    }
+  };
+
+  const fetchWorkingHours = async (empId) => {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      console.log('Fetching working hours for date:', today);
+      
+      const response = await attendanceAPI.getWorkingHours(empId, today, today);
+      console.log('Working hours response:', response);
+      
+      if (response.success && response.data) {
+        const workingHours = response.data.formatted_duration || '--:--';
+        console.log('Setting working hours:', workingHours);
+        setTotalWorkingHours(workingHours);
+      } else {
+        console.log('Working hours API failed, using fallback calculation');
+        setTotalWorkingHours('--:--');
+      }
+    } catch (error) {
+      console.error('Error fetching working hours:', error);
+      setTotalWorkingHours('--:--');
     }
   };
 
@@ -133,8 +156,8 @@ const Dashboard = () => {
       if (response.success) {
         setMessage('Successfully checked out!');
         await fetchTodayStatus();
-        // Update working hours after successful check-out
-        await updateWorkingHours(empId);
+        // Refresh working hours after checkout
+        await fetchWorkingHours(empId);
       } else {
         setMessage(response.message);
       }
@@ -200,96 +223,20 @@ const Dashboard = () => {
     return `${hours}h ${minutes}m`;
   };
 
-  const updateWorkingHours = async (empId) => {
-    try {
-      const today = new Date().toISOString().split('T')[0];
-      // Use the existing attendance endpoint to get today's records
-      const response = await fetch(`http://localhost:8085/api/attendance/employee/${empId}`);
-      
-      if (response.ok) {
-        const data = await response.json();
-        console.log('Attendance response for working hours:', data);
-        
-        // Filter today's records and calculate total working hours
-        const todayRecords = data.filter(record => {
-          if (!record.checkin_datetime) return false;
-          const recordDate = record.checkin_datetime.split('T')[0];
-          return recordDate === today;
-        });
-        
-        console.log('Today\'s records for working hours:', todayRecords);
-        
-        // Calculate total working seconds from completed sessions
-        const totalWorkingSeconds = todayRecords.reduce((total, record) => {
-          if (record.checkin_datetime && record.checkout_datetime) {
-            const checkIn = new Date(record.checkin_datetime);
-            const checkOut = new Date(record.checkout_datetime);
-            const diffMs = checkOut - checkIn;
-            if (diffMs > 0) {
-              return total + Math.floor(diffMs / 1000);
-            }
-          }
-          return total;
-        }, 0);
-        
-        console.log('Total working seconds:', totalWorkingSeconds);
-        
-        // Convert to hours and minutes
-        const totalHours = Math.floor(totalWorkingSeconds / 3600);
-        const totalMinutes = Math.floor((totalWorkingSeconds % 3600) / 60);
-        const formattedDuration = totalWorkingSeconds > 0 ? `${totalHours}h ${totalMinutes}m` : '--:--';
-        
-        console.log('Formatted duration:', formattedDuration);
-        
-        // Update the todayStatus with working hours
-        setTodayStatus(prev => {
-          const updated = {
-            ...prev,
-            totalWorkingHours: formattedDuration
-          };
-          console.log('Updated todayStatus:', updated);
-          return updated;
-        });
-      } else {
-        console.error('Failed to fetch attendance for working hours:', response.status);
-        const errorData = await response.json().catch(() => ({}));
-        console.error('Attendance error details:', errorData);
-      }
-    } catch (error) {
-      console.error('Error updating working hours:', error);
-    }
-  };
-
   const getTotalWorkingHours = () => {
-    console.log('getTotalWorkingHours called, todayStatus:', todayStatus);
-    console.log('totalWorkingHours from API:', todayStatus.totalWorkingHours);
-    
-    // Use the working hours from API if available, otherwise fall back to calculated
-    if (todayStatus.totalWorkingHours && todayStatus.totalWorkingHours !== '--:--') {
-      console.log('Returning API working hours:', todayStatus.totalWorkingHours);
-      return todayStatus.totalWorkingHours;
-    }
-    
-    console.log('Falling back to calculated hours');
-    // Fallback calculation from records
     const totalMinutes = todayStatus.todayRecords.reduce((total, record) => {
       if (record.checkIn && record.checkOut) {
         const checkIn = new Date(`2000-01-01T${record.checkIn}`);
         const checkOut = new Date(`2000-01-01T${record.checkOut}`);
-        const recordMinutes = (checkOut - checkIn) / (1000 * 60);
-        console.log('Record minutes:', recordMinutes, 'for record:', record);
-        return total + recordMinutes;
+        return total + (checkOut - checkIn) / (1000 * 60);
       }
       return total;
     }, 0);
     
-    console.log('Total calculated minutes:', totalMinutes);
     const hours = Math.floor(totalMinutes / 60);
     const minutes = Math.floor(totalMinutes % 60);
-    const result = totalMinutes > 0 ? `${hours}h ${minutes}m` : '--:--';
-    console.log('Returning calculated result:', result);
     
-    return result;
+    return totalMinutes > 0 ? `${hours}h ${minutes}m` : '--:--';
   };
 
   const getEmployeeId = () => {
@@ -414,8 +361,7 @@ const Dashboard = () => {
                 </span>
               </h2>
               
-              <div className="space-y-4">
-
+                              <div className="space-y-4">
 
                 {/* Check-in Button - Always enabled */}
                 <button
@@ -513,7 +459,7 @@ const Dashboard = () => {
                         <span className="font-medium">Total Working Hours</span>
                       </div>
                       <span className="font-mono text-lg text-primary-600">
-                        {getTotalWorkingHours()}
+                        {totalWorkingHours}
                       </span>
                     </div>
                   </>

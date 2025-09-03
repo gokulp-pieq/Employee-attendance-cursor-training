@@ -274,37 +274,63 @@ export const attendanceAPI = {
     
     console.log('Raw attendance response:', response.data);
     
-    // Filter for today's records with proper type checking
+    // Helper function to convert array datetime to ISO string
+    const arrayToISOString = (dateTimeArray) => {
+      if (!Array.isArray(dateTimeArray) || dateTimeArray.length < 5) return null;
+      const [year, month, day, hour, minute] = dateTimeArray;
+      return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00`;
+    };
+    
+    // Helper function to extract time from array datetime
+    const arrayToTimeString = (dateTimeArray) => {
+      if (!Array.isArray(dateTimeArray) || dateTimeArray.length < 5) return null;
+      const [_, __, ___, hour, minute] = dateTimeArray;
+      return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+    };
+    
+    // Filter for today's records
     const today = new Date().toISOString().split('T')[0];
     const todayRecords = response.data.filter(record => {
-      // Check if checkin_datetime exists and is a string
-      if (!record || typeof record.checkin_datetime !== 'string') {
-        console.log('Invalid record or checkin_datetime:', record);
+      if (!record) return false;
+      
+      // Handle both array and string formats
+      let recordDate;
+      if (Array.isArray(record.checkinDatetime)) {
+        const [year, month, day] = record.checkinDatetime;
+        recordDate = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      } else if (record.checkin_datetime && typeof record.checkin_datetime === 'string') {
+        recordDate = record.checkin_datetime.split('T')[0];
+      } else {
+        console.log('Invalid checkin datetime format:', record.checkinDatetime || record.checkin_datetime);
         return false;
       }
       
-      // Check if the date part matches today
-      return record.checkin_datetime.startsWith(today);
+      const isToday = recordDate === today;
+      console.log('Record date:', recordDate, 'is today:', isToday);
+      return isToday;
     });
     
     console.log('Filtered today records:', todayRecords);
     
     // Find active check-in (without checkout)
-    const activeRecord = todayRecords.find(record => !record.checkout_datetime);
+    const activeRecord = todayRecords.find(record => {
+      const hasCheckout = Array.isArray(record.checkoutDatetime) || (record.checkout_datetime && typeof record.checkout_datetime === 'string');
+      return !hasCheckout;
+    });
     
     return { 
       success: true, 
       data: {
         todayRecords: todayRecords.map(record => ({
-          id: record.id,
-          checkIn: record.checkin_datetime ? record.checkin_datetime.split('T')[1].slice(0, 8) : null,
-          checkOut: record.checkout_datetime ? record.checkout_datetime.split('T')[1].slice(0, 8) : null,
+          id: record.id || record.empId,
+          checkIn: arrayToTimeString(record.checkinDatetime) || (record.checkin_datetime ? record.checkin_datetime.split('T')[1].slice(0, 8) : null),
+          checkOut: arrayToTimeString(record.checkoutDatetime) || (record.checkout_datetime ? record.checkout_datetime.split('T')[1].slice(0, 8) : null),
           isCustom: false
         })),
         hasActiveCheckIn: !!activeRecord,
         activeRecord: activeRecord ? {
-          id: activeRecord.id,
-          checkIn: activeRecord.checkin_datetime ? activeRecord.checkin_datetime.split('T')[1].slice(0, 8) : null
+          id: activeRecord.id || activeRecord.empId,
+          checkIn: arrayToTimeString(activeRecord.checkinDatetime) || (activeRecord.checkin_datetime ? activeRecord.checkin_datetime.split('T')[1].slice(0, 8) : null)
         } : null,
         totalCheckIns: todayRecords.length
       }
@@ -319,13 +345,20 @@ export const attendanceAPI = {
     
     // Filter by date range with proper type checking
     const records = response.data.filter(record => {
-      // Check if checkin_datetime exists and is a string
-      if (!record || typeof record.checkin_datetime !== 'string') {
-        console.log('Invalid record or checkin_datetime:', record);
+      if (!record) return false;
+      
+      // Handle both array and string formats
+      let recordDate;
+      if (Array.isArray(record.checkinDatetime)) {
+        const [year, month, day] = record.checkinDatetime;
+        recordDate = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      } else if (record.checkin_datetime && typeof record.checkin_datetime === 'string') {
+        recordDate = record.checkin_datetime.split('T')[0];
+      } else {
+        console.log('Invalid checkin datetime format:', record.checkinDatetime || record.checkin_datetime);
         return false;
       }
       
-      const recordDate = record.checkin_datetime.split('T')[0];
       return recordDate >= startDate && recordDate <= endDate;
     });
     
@@ -341,6 +374,11 @@ export const attendanceAPI = {
   getAttendanceSummary: async (date) => {
     const endpoint = date ? `/api/attendance/summary/date/${date}` : '/api/attendance/summary/today';
     const response = await apiCall(endpoint);
+    return response;
+  },
+
+  getWorkingHours: async (empId, startDate, endDate) => {
+    const response = await apiCall(`/api/attendance/working-hours/${empId}?start_date=${startDate}&end_date=${endDate}`);
     return response;
   },
   
