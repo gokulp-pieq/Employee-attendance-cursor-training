@@ -19,7 +19,7 @@ const ProtectedRoute = ({ children, adminOnly = false }) => {
     return <Navigate to="/login" replace />;
   }
 
-  if (adminOnly && user.role !== 'admin') {
+  if (adminOnly && user.role_id !== 5) {
     return <Navigate to="/dashboard" replace />;
   }
 
@@ -43,7 +43,7 @@ const AppRoutes = () => {
         path="/dashboard" 
         element={
           <ProtectedRoute>
-            {user?.role === 'admin' ? <AdminDashboard /> : <Dashboard />}
+            {user?.role_id === 5 ? <AdminDashboard /> : <Dashboard />}
           </ProtectedRoute>
         } 
       />

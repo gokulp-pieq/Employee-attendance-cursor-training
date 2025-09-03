@@ -27,7 +27,7 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, password) => {
     const response = await authAPI.login(email, password);
     if (response.success) {
-      setUser(response.user);
+      setUser(response.data); // response.data contains the user object directly
     }
     return response;
   };

@@ -68,26 +68,60 @@ const dummyAttendance = [
 // Simulate API delay
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+// API Configuration
+const API_BASE_URL = 'http://localhost:8085';
+
+// Helper function for API calls
+const apiCall = async (endpoint, options = {}) => {
+  const url = `${API_BASE_URL}${endpoint}`;
+  
+  const defaultOptions = {
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+    ...options,
+  };
+
+  try {
+    const response = await fetch(url, defaultOptions);
+    const data = await response.json();
+    
+    if (!response.ok) {
+      return { 
+        success: false, 
+        message: data.message || `HTTP error! status: ${response.status}`,
+        code: response.status
+      };
+    }
+    
+    return { success: true, data };
+  } catch (error) {
+    return { 
+      success: false, 
+      message: error.message || 'Network error occurred' 
+    };
+  }
+};
+
 // Authentication API
 export const authAPI = {
   login: async (email, password) => {
-    await delay(1000);
+    const response = await apiCall('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    });
     
-    // Simple validation - in real app, this would be server-side
-    const user = dummyEmployees.find(emp => emp.email === email);
-    
-    if (user && password === 'password123') {
-      const token = `dummy-token-${user.id}`;
-      localStorage.setItem('authToken', token);
-      localStorage.setItem('currentUser', JSON.stringify(user));
-      return { success: true, user, token };
+    if (response.success) {
+      // Store user data in localStorage
+      localStorage.setItem('currentUser', JSON.stringify(response.data));
+      localStorage.setItem('authToken', 'authenticated'); // Since no JWT token in response
     }
     
-    return { success: false, message: 'Invalid credentials' };
+    return response;
   },
   
   logout: async () => {
-    await delay(500);
     localStorage.removeItem('authToken');
     localStorage.removeItem('currentUser');
     return { success: true };
@@ -99,7 +133,7 @@ export const authAPI = {
   },
   
   isAuthenticated: () => {
-    return !!localStorage.getItem('authToken');
+    return !!localStorage.getItem('currentUser');
   }
 };
 
