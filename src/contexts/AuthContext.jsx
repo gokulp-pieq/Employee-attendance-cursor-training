@@ -18,8 +18,10 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     // Check if user is already logged in
     const currentUser = authAPI.getCurrentUser();
+    console.log('AuthContext useEffect - currentUser from localStorage:', currentUser);
     if (currentUser && authAPI.isAuthenticated()) {
       setUser(currentUser);
+      console.log('AuthContext useEffect - User set from localStorage:', currentUser);
     }
     setLoading(false);
   }, []);
@@ -33,6 +35,8 @@ export const AuthProvider = ({ children }) => {
     if (response.success) {
       setUser(response.data); // response.data contains the user object directly
       console.log('User set to:', response.data);
+      console.log('User role_id:', response.data.role_id);
+      console.log('User role:', response.data.role);
     }
     return response;
   };

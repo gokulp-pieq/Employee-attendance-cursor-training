@@ -19,7 +19,7 @@ const ProtectedRoute = ({ children, adminOnly = false }) => {
     return <Navigate to="/login" replace />;
   }
 
-  if (adminOnly && user.role_id !== 5) {
+  if (adminOnly && user.role_id !== 5 && user.roleId !== 5 && user.role !== 'Admin') {
     return <Navigate to="/dashboard" replace />;
   }
 
@@ -28,6 +28,16 @@ const ProtectedRoute = ({ children, adminOnly = false }) => {
 
 const AppRoutes = () => {
   const { user, loading } = useAuth();
+
+  // Debug logging
+  console.log('AppRoutes - User:', user);
+  console.log('AppRoutes - User role_id:', user?.role_id);
+  console.log('AppRoutes - User roleId:', user?.roleId);
+  console.log('AppRoutes - User role:', user?.role);
+  console.log('AppRoutes - Is admin by role_id?', user?.role_id === 5);
+  console.log('AppRoutes - Is admin by roleId?', user?.roleId === 5);
+  console.log('AppRoutes - Is admin by role?', user?.role === 'Admin');
+  console.log('AppRoutes - Final admin check:', (user?.role_id === 5 || user?.roleId === 5 || user?.role === 'Admin'));
 
   if (loading) {
     return <LoadingSpinner />;
@@ -43,7 +53,7 @@ const AppRoutes = () => {
         path="/dashboard" 
         element={
           <ProtectedRoute>
-            {user?.role_id === 5 ? <AdminDashboard /> : <Dashboard />}
+            {(user?.role_id === 5 || user?.roleId === 5 || user?.role === 'Admin') ? <AdminDashboard /> : <Dashboard />}
           </ProtectedRoute>
         } 
       />

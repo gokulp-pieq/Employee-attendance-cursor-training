@@ -429,10 +429,10 @@ Returns today's attendance records for all employees.
 ```json
 [
   {
-    "id": 1,
     "emp_id": "550e8400-e29b-41d4-a716-446655440000",
     "checkin_datetime": "2025-09-03T08:00:00",
-    "checkout_datetime": "2025-09-03T17:00:00"
+    "checkout_datetime": "2025-09-03T17:00:00",
+    "total_working_seconds": 32400
   }
 ]
 ```
@@ -492,12 +492,20 @@ Returns attendance records for a specific employee on a specific date.
 
 **Response (200 OK):**
 ```json
-{
-  "id": 1,
-  "emp_id": "550e8400-e29b-41d4-a716-446655440000",
-  "checkin_datetime": "2025-09-03T08:00:00",
-  "checkout_datetime": "2025-09-03T17:00:00"
-}
+[
+  {
+    "emp_id": "550e8400-e29b-41d4-a716-446655440000",
+    "checkin_datetime": "2025-09-03T08:00:00",
+    "checkout_datetime": "2025-09-03T12:00:00",
+    "total_working_seconds": 14400
+  },
+  {
+    "emp_id": "550e8400-e29b-41d4-a716-446655440000",
+    "checkin_datetime": "2025-09-03T13:00:00",
+    "checkout_datetime": "2025-09-03T17:00:00",
+    "total_working_seconds": 14400
+  }
+]
 ```
 
 **Response (404 Not Found):**
