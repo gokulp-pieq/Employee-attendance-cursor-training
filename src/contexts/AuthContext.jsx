@@ -26,8 +26,13 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
     const response = await authAPI.login(email, password);
+    console.log('Login API response:', response);
+    console.log('Response data:', response.data);
+    console.log('Response data keys:', Object.keys(response.data || {}));
+    
     if (response.success) {
       setUser(response.data); // response.data contains the user object directly
+      console.log('User set to:', response.data);
     }
     return response;
   };

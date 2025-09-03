@@ -140,178 +140,245 @@ export const authAPI = {
 // Employee API
 export const employeeAPI = {
   getAllEmployees: async () => {
-    await delay(800);
-    return { success: true, data: dummyEmployees };
+    const response = await apiCall('/api/employees');
+    return response;
   },
   
   getEmployeeById: async (id) => {
-    await delay(600);
-    const employee = dummyEmployees.find(emp => emp.id === parseInt(id));
-    return employee 
-      ? { success: true, data: employee }
-      : { success: false, message: 'Employee not found' };
+    const response = await apiCall(`/api/employees/${id}`);
+    return response;
+  },
+  
+  getEmployeeByEmail: async (email) => {
+    const response = await apiCall(`/api/employees/email/${email}`);
+    return response;
+  },
+  
+  getEmployeeByUUID: async (empId) => {
+    const response = await apiCall(`/api/employees/uuid/${empId}`);
+    return response;
   },
   
   createEmployee: async (employeeData) => {
-    await delay(1000);
-    const newEmployee = {
-      id: Math.max(...dummyEmployees.map(e => e.id)) + 1,
-      ...employeeData,
-      joinDate: new Date().toISOString().split('T')[0],
-      status: 'active'
-    };
-    dummyEmployees.push(newEmployee);
-    return { success: true, data: newEmployee };
+    const response = await apiCall('/api/employees', {
+      method: 'POST',
+      body: JSON.stringify(employeeData),
+    });
+    return response;
   },
   
-  updateEmployee: async (id, employeeData) => {
-    await delay(800);
-    const index = dummyEmployees.findIndex(emp => emp.id === parseInt(id));
-    if (index !== -1) {
-      dummyEmployees[index] = { ...dummyEmployees[index], ...employeeData };
-      return { success: true, data: dummyEmployees[index] };
-    }
-    return { success: false, message: 'Employee not found' };
+  updateEmployee: async (email, employeeData) => {
+    const response = await apiCall(`/api/employees/email/${email}`, {
+      method: 'PUT',
+      body: JSON.stringify(employeeData),
+    });
+    return response;
   },
   
-  deleteEmployee: async (id) => {
-    await delay(600);
-    const index = dummyEmployees.findIndex(emp => emp.id === parseInt(id));
-    if (index !== -1) {
-      dummyEmployees.splice(index, 1);
-      return { success: true };
-    }
-    return { success: false, message: 'Employee not found' };
+  deleteEmployee: async (email) => {
+    const response = await apiCall(`/api/employees/email/${email}`, {
+      method: 'DELETE',
+    });
+    return response;
+  },
+  
+  getAllRoles: async () => {
+    const response = await apiCall('/api/employees/roles');
+    return response;
+  },
+  
+  getAllDepartments: async () => {
+    const response = await apiCall('/api/employees/departments');
+    return response;
   }
 };
 
 // Attendance API
 export const attendanceAPI = {
-  checkIn: async (employeeId, customDate = null, customTime = null) => {
-    await delay(800);
-    const date = customDate || new Date().toISOString().split('T')[0];
-    const time = customTime || new Date().toTimeString().split(' ')[0];
+  checkIn: async (empId) => {
+    // Get current local datetime in the exact format expected by the API
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const seconds = String(now.getSeconds()).padStart(2, '0');
     
-    // For regular check-in (not custom), check if there's an active check-in without checkout
-    if (!customDate && !customTime) {
-      const today = new Date().toISOString().split('T')[0];
-      const activeRecord = dummyAttendance.find(
-        record => record.employeeId === employeeId && record.date === today && !record.checkOut
-      );
-      
-      if (activeRecord) {
-        return { success: false, message: 'Please check out from your current session before checking in again' };
-      }
-    }
+    // Format: YYYY-MM-DDTHH:mm:ss (matching the API documentation example)
+    const localDateTime = `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
     
-    const newRecord = {
-      id: Math.max(...dummyAttendance.map(a => a.id), 0) + 1,
-      employeeId,
-      date,
-      checkIn: time,
-      checkOut: null,
-      status: 'present',
-      isCustom: !!(customDate || customTime)
+    const requestBody = { 
+      emp_id: empId,
+      checkin_datetime: localDateTime
     };
     
-    dummyAttendance.push(newRecord);
-    return { success: true, data: newRecord };
-  },
-  
-  checkOut: async (employeeId, recordId = null, customTime = null) => {
-    await delay(800);
-    const today = new Date().toISOString().split('T')[0];
-    const now = customTime || new Date().toTimeString().split(' ')[0];
+    console.log('Check-in request body:', requestBody);
+    console.log('Check-in request body JSON:', JSON.stringify(requestBody));
+    console.log('Check-in URL:', `${API_BASE_URL}/api/attendance/checkin`);
     
-    let record;
-    if (recordId) {
-      // Check out specific record
-      record = dummyAttendance.find(r => r.id === recordId);
-    } else {
-      // Find latest check-in without check-out for today
-      const todayRecords = dummyAttendance.filter(
-        r => r.employeeId === employeeId && r.date === today && !r.checkOut
-      );
-      record = todayRecords[todayRecords.length - 1]; // Get latest
-    }
-    
-    if (!record) {
-      return { success: false, message: 'No active check-in record found' };
-    }
-    
-    if (record.checkOut) {
-      return { success: false, message: 'This record is already checked out' };
-    }
-    
-    record.checkOut = now;
-    if (customTime) record.isCustom = true;
-    return { success: true, data: record };
-  },
-  
-  getAttendanceByEmployee: async (employeeId, startDate, endDate) => {
-    await delay(600);
-    const records = dummyAttendance.filter(record => {
-      const recordDate = new Date(record.date);
-      const start = new Date(startDate);
-      const end = new Date(endDate);
+    try {
+      const response = await apiCall('/api/attendance/checkin', {
+        method: 'POST',
+        body: JSON.stringify(requestBody),
+      });
       
-      return record.employeeId === employeeId && 
-             recordDate >= start && 
-             recordDate <= end;
+      console.log('Check-in API response:', response);
+      return response;
+    } catch (error) {
+      console.error('Check-in API error:', error);
+      return { success: false, message: error.message };
+    }
+  },
+  
+  checkOut: async (empId) => {
+    // Get current local datetime in the exact format expected by the API
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const seconds = String(now.getSeconds()).padStart(2, '0');
+    
+    // Format: YYYY-MM-DDTHH:mm:ss (matching the API documentation example)
+    const localDateTime = `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
+    
+    const requestBody = { 
+      emp_id: empId,
+      checkout_datetime: localDateTime
+    };
+    
+    console.log('Check-out request body:', requestBody);
+    console.log('Check-out request body JSON:', JSON.stringify(requestBody));
+    
+    try {
+      const response = await apiCall('/api/attendance/checkout', {
+        method: 'POST',
+        body: JSON.stringify(requestBody),
+      });
+      
+      console.log('Check-out API response:', response);
+      return response;
+    } catch (error) {
+      console.error('Check-out API error:', error);
+      return { success: false, message: error.message };
+    }
+  },
+  
+  getTodayStatus: async (empId) => {
+    const response = await apiCall(`/api/attendance/employee/${empId}`);
+    if (!response.success) {
+      return { success: false, data: { todayRecords: [], hasActiveCheckIn: false, activeRecord: null, totalCheckIns: 0 } };
+    }
+    
+    console.log('Raw attendance response:', response.data);
+    
+    // Filter for today's records with proper type checking
+    const today = new Date().toISOString().split('T')[0];
+    const todayRecords = response.data.filter(record => {
+      // Check if checkin_datetime exists and is a string
+      if (!record || typeof record.checkin_datetime !== 'string') {
+        console.log('Invalid record or checkin_datetime:', record);
+        return false;
+      }
+      
+      // Check if the date part matches today
+      return record.checkin_datetime.startsWith(today);
+    });
+    
+    console.log('Filtered today records:', todayRecords);
+    
+    // Find active check-in (without checkout)
+    const activeRecord = todayRecords.find(record => !record.checkout_datetime);
+    
+    return { 
+      success: true, 
+      data: {
+        todayRecords: todayRecords.map(record => ({
+          id: record.id,
+          checkIn: record.checkin_datetime ? record.checkin_datetime.split('T')[1].slice(0, 8) : null,
+          checkOut: record.checkout_datetime ? record.checkout_datetime.split('T')[1].slice(0, 8) : null,
+          isCustom: false
+        })),
+        hasActiveCheckIn: !!activeRecord,
+        activeRecord: activeRecord ? {
+          id: activeRecord.id,
+          checkIn: activeRecord.checkin_datetime ? activeRecord.checkin_datetime.split('T')[1].slice(0, 8) : null
+        } : null,
+        totalCheckIns: todayRecords.length
+      }
+    };
+  },
+  
+  getAttendanceByEmployee: async (empId, startDate, endDate) => {
+    const response = await apiCall(`/api/attendance/employee/${empId}`);
+    if (!response.success) {
+      return { success: false, data: [] };
+    }
+    
+    // Filter by date range with proper type checking
+    const records = response.data.filter(record => {
+      // Check if checkin_datetime exists and is a string
+      if (!record || typeof record.checkin_datetime !== 'string') {
+        console.log('Invalid record or checkin_datetime:', record);
+        return false;
+      }
+      
+      const recordDate = record.checkin_datetime.split('T')[0];
+      return recordDate >= startDate && recordDate <= endDate;
     });
     
     return { success: true, data: records };
   },
   
   getAllAttendance: async (date) => {
-    await delay(800);
-    const records = date 
-      ? dummyAttendance.filter(record => record.date === date)
-      : dummyAttendance;
-    
-    // Join with employee data
-    const enrichedRecords = records.map(record => ({
-      ...record,
-      employee: dummyEmployees.find(emp => emp.id === record.employeeId)
-    }));
-    
-    return { success: true, data: enrichedRecords };
+    const endpoint = date ? `/api/attendance/date/${date}` : '/api/attendance/today';
+    const response = await apiCall(endpoint);
+    return response;
   },
   
-  getTodayStatus: async (employeeId) => {
-    await delay(400);
-    const today = new Date().toISOString().split('T')[0];
-    const todayRecords = dummyAttendance.filter(
-      record => record.employeeId === employeeId && record.date === today
-    );
-    
-    const activeRecord = todayRecords.find(r => !r.checkOut); // Find active check-in
-    
-    return { 
-      success: true, 
-      data: {
-        todayRecords,
-        hasActiveCheckIn: !!activeRecord,
-        activeRecord,
-        totalCheckIns: todayRecords.length
-      }
-    };
+  getAttendanceSummary: async (date) => {
+    const endpoint = date ? `/api/attendance/summary/date/${date}` : '/api/attendance/summary/today';
+    const response = await apiCall(endpoint);
+    return response;
   },
-
-  addCustomAttendance: async (employeeId, date, checkInTime, checkOutTime = null) => {
-    await delay(800);
+  
+  addCustomAttendance: async (empId, date, checkInTime, checkOutTime = null) => {
+    // Convert local date and time to ISO datetime format expected by API
+    const checkInDateTime = `${date}T${checkInTime}:00`;
+    const checkOutDateTime = checkOutTime ? `${date}T${checkOutTime}:00` : null;
     
-    const newRecord = {
-      id: Math.max(...dummyAttendance.map(a => a.id), 0) + 1,
-      employeeId,
-      date,
-      checkIn: checkInTime,
-      checkOut: checkOutTime,
-      status: 'present',
-      isCustom: true
-    };
+    // First check-in
+    const checkInResponse = await apiCall('/api/attendance/checkin', {
+      method: 'POST',
+      body: JSON.stringify({ 
+        emp_id: empId,
+        checkin_datetime: checkInDateTime
+      }),
+    });
     
-    dummyAttendance.push(newRecord);
-    return { success: true, data: newRecord };
+    if (!checkInResponse.success) {
+      return checkInResponse;
+    }
+    
+    // If checkout time is provided, also check out
+    if (checkOutDateTime) {
+      const checkOutResponse = await apiCall('/api/attendance/checkout', {
+        method: 'POST',
+        body: JSON.stringify({ 
+          emp_id: empId,
+          checkout_datetime: checkOutDateTime
+        }),
+      });
+      
+      if (!checkOutResponse.success) {
+        return checkOutResponse;
+      }
+      
+      return { success: true, data: checkOutResponse.data };
+    }
+    
+    return checkInResponse;
   }
 };
