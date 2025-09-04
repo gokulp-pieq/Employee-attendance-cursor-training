@@ -35,6 +35,7 @@ const AdminDashboard = () => {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [totalWorkingHours, setTotalWorkingHours] = useState('--:--');
   
   // Employee management states
   const [employees, setEmployees] = useState([]);
@@ -47,13 +48,14 @@ const AdminDashboard = () => {
     last_name: '',
     email: '',
     password: '',
-    role_id: '',
-    dept_id: '',
+    role_name: '',
+    dept_name: '',
     reporting_to: ''
   });
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDept, setFilterDept] = useState('');
   const [filterRole, setFilterRole] = useState('');
+  const [filterManager, setFilterManager] = useState('');
 
   useEffect(() => {
     fetchTodayStatus();
@@ -61,13 +63,19 @@ const AdminDashboard = () => {
     fetchEmployees();
     fetchRolesAndDepartments();
     
+    // Fetch initial working hours
+    if (user?.empId || user?.emp_id || user?.id) {
+      const empId = user?.empId || user?.emp_id || user?.id;
+      fetchWorkingHours(empId);
+    }
+    
     // Update current time every second
     const timer = setInterval(() => {
       setCurrentTime(new Date());
     }, 1000);
 
     return () => clearInterval(timer);
-  }, []);
+  }, [user]);
 
   const fetchTodayStatus = async () => {
     try {
@@ -93,6 +101,24 @@ const AdminDashboard = () => {
     }
   };
 
+  const fetchWorkingHours = async (empId) => {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const response = await attendanceAPI.getWorkingHours(empId, today, today);
+      if (response.success) {
+        // Update working hours display
+        if (response.data.formatted_duration) {
+          setTotalWorkingHours(response.data.formatted_duration);
+        } else {
+          setTotalWorkingHours('--:--');
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching working hours:', error);
+      setTotalWorkingHours('--:--');
+    }
+  };
+
   const handleCheckIn = async () => {
     setLoading(true);
     setMessage('');
@@ -104,6 +130,8 @@ const AdminDashboard = () => {
         setMessage('Successfully checked in!');
         await fetchTodayStatus();
         await fetchTodayAttendance();
+        // Refresh working hours after check-in
+        await fetchWorkingHours(empId);
       } else {
         setMessage(response.message);
       }
@@ -114,17 +142,24 @@ const AdminDashboard = () => {
     }
   };
 
-  const handleCheckOut = async () => {
+  const handleCheckOut = async (recordId = null) => {
     setLoading(true);
     setMessage('');
     
     try {
       const empId = user?.empId || user?.emp_id || user?.id;
+      if (!empId) {
+        setMessage('Error: Employee ID not found. Please log in again.');
+        return;
+      }
+      
       const response = await attendanceAPI.checkOut(empId);
       if (response.success) {
         setMessage('Successfully checked out!');
         await fetchTodayStatus();
         await fetchTodayAttendance();
+        // Refresh working hours after checkout
+        await fetchWorkingHours(empId);
       } else {
         setMessage(response.message);
       }
@@ -199,6 +234,13 @@ const AdminDashboard = () => {
     setLoading(true);
     
     try {
+      // Validate that regular employees have a reporting manager
+      if (!['Manager', 'Admin'].includes(employeeForm.role_name) && !employeeForm.reporting_to) {
+        setMessage('Regular employees must have a reporting manager');
+        setLoading(false);
+        return;
+      }
+      
       const response = await employeeAPI.createEmployee(employeeForm);
       if (response.success) {
         setMessage('Employee added successfully!');
@@ -220,7 +262,24 @@ const AdminDashboard = () => {
     setLoading(true);
     
     try {
-      const response = await employeeAPI.updateEmployee(editingEmployee.email, employeeForm);
+      // Validate that regular employees have a reporting manager
+      if (!['Manager', 'Admin'].includes(employeeForm.role_name) && !employeeForm.reporting_to) {
+        setMessage('Regular employees must have a reporting manager');
+        setLoading(false);
+        return;
+      }
+      
+      // Convert role_name and dept_name back to IDs for update request
+      const role = roles.find(r => r.name === employeeForm.role_name);
+      const dept = departments.find(d => d.name === employeeForm.dept_name);
+      
+      const updateData = {
+        ...employeeForm,
+        role_id: role ? role.id : null,
+        dept_id: dept ? dept.id : null
+      };
+      
+      const response = await employeeAPI.updateEmployee(editingEmployee.email, updateData);
       if (response.success) {
         setMessage('Employee updated successfully!');
         setShowEmployeeModal(false);
@@ -231,7 +290,7 @@ const AdminDashboard = () => {
         setMessage(response.message || 'Error updating employee');
       }
     } catch (error) {
-      setMessage('Error updating employee. Please try again.');
+        setMessage('Error updating employee. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -263,9 +322,9 @@ const AdminDashboard = () => {
       last_name: '',
       email: '',
       password: '',
-      role_id: '',
-      dept_id: '',
-      reporting_to: ''
+      role_name: '',
+      dept_name: '',
+      reporting_to: null
     });
   };
 
@@ -276,8 +335,8 @@ const AdminDashboard = () => {
       last_name: employee.last_name || employee.lastName || '',
       email: employee.email || '',
       password: '',
-      role_id: employee.role_id || employee.roleId || '',
-      dept_id: employee.dept_id || employee.deptId || '',
+      role_name: employee.role_name || employee.roleName || '',
+      dept_name: employee.dept_name || employee.deptName || '',
       reporting_to: employee.reporting_to || employee.reportingTo || ''
     });
     setShowEmployeeModal(true);
@@ -297,6 +356,20 @@ const AdminDashboard = () => {
   const getDepartmentName = (deptId) => {
     const dept = departments.find(d => d.id === deptId);
     return dept ? dept.name : `Department ${deptId}`;
+  };
+
+  const getManagerName = (reportingToId) => {
+    if (!reportingToId) return 'Self-reporting';
+    const manager = employees.find(emp => 
+      emp.emp_id === reportingToId || 
+      emp.empId === reportingToId || 
+      emp.id === reportingToId
+    );
+    if (manager) {
+      const role = manager.role_name || manager.roleName || getRoleName(manager.role_id || manager.roleId);
+      return `${manager.first_name || manager.firstName} ${manager.last_name || manager.lastName} (${role})`;
+    }
+    return 'Manager not found';
   };
 
   const viewEmployeeSummary = async (empId) => {
@@ -322,10 +395,16 @@ const AdminDashboard = () => {
     const matchesSearch = firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          lastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          email.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesDept = !filterDept || (employee.dept_id == filterDept || employee.deptId == filterDept);
-    const matchesRole = !filterRole || (employee.role_id == filterRole || employee.roleId == filterRole);
+    const matchesDept = !filterDept || (employee.dept_id == filterDept || employee.deptId == filterDept || employee.dept_name == filterDept || employee.deptName == filterDept);
+    const matchesRole = !filterRole || (employee.role_id == filterRole || employee.roleId == filterRole || employee.role_name == filterRole || employee.roleName == filterRole);
+    const matchesManager = !filterManager || 
+                          (filterManager === 'none' && !(employee.reporting_to || employee.reportingTo)) ||
+                          (filterManager !== 'none' && (employee.reporting_to || employee.reportingTo) && (
+                            (employee.reporting_to || employee.reportingTo) === filterManager ||
+                            (employee.reporting_to || employee.reportingTo).toString() === filterManager.toString()
+                          ));
     
-    return matchesSearch && matchesDept && matchesRole;
+    return matchesSearch && matchesDept && matchesRole && matchesManager;
   });
 
   const stats = getAttendanceStats();
@@ -421,50 +500,47 @@ const AdminDashboard = () => {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Personal Check In/Out */}
+            {/* Check In/Out Actions */}
             <div className="card">
-              <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
-                <Clock className="h-6 w-6 mr-2 text-primary-600" />
-                My Attendance
+              <h2 className="text-xl font-semibold text-gray-900 mb-6 flex items-center justify-between">
+                <div className="flex items-center">
+                  <Clock className="h-6 w-6 mr-2 text-primary-600" />
+                  Attendance Actions
+                </div>
+                <span className="text-sm text-gray-500">
+                  Today: {todayStatus.totalCheckIns} check-ins
+                </span>
               </h2>
               
-              <div className="space-y-4 mb-6">
+              <div className="space-y-4">
+                {/* Check-in Button - Always enabled */}
                 <button
                   onClick={handleCheckIn}
-                  disabled={loading || todayStatus.hasActiveCheckIn}
-                  className={`w-full py-3 px-4 rounded-lg font-medium flex items-center justify-center space-x-2 transition-colors ${
-                    todayStatus.hasActiveCheckIn
-                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                      : 'bg-green-600 hover:bg-green-700 text-white'
-                  } disabled:opacity-50`}
+                  disabled={loading}
+                  className="w-full py-4 px-6 rounded-lg font-medium flex items-center justify-center space-x-2 transition-colors bg-green-600 hover:bg-green-700 text-white disabled:opacity-50"
                 >
                   {loading ? (
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
                   ) : (
                     <>
-                      <CheckCircle className="h-4 w-4" />
-                      <span>{todayStatus.hasActiveCheckIn ? 'Already Checked In' : 'Check In'}</span>
+                      <CheckCircle className="h-5 w-5" />
+                      <span>Check In</span>
                     </>
                   )}
                 </button>
 
+                {/* Check-out Button - Always enabled */}
                 <button
-                  onClick={handleCheckOut}
-                  disabled={loading || !todayStatus.hasActiveCheckIn}
-                  className={`w-full py-3 px-4 rounded-lg font-medium flex items-center justify-center space-x-2 transition-colors ${
-                    !todayStatus.hasActiveCheckIn
-                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                      : 'bg-red-600 hover:bg-red-700 text-white'
-                  }`}
+                  onClick={() => handleCheckOut()}
+                  disabled={loading}
+                  className="w-full py-4 px-6 rounded-lg font-medium flex items-center justify-center space-x-2 transition-colors bg-red-600 hover:bg-red-700 text-white disabled:opacity-50"
                 >
                   {loading ? (
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
                   ) : (
                     <>
-                      <XCircle className="h-4 w-4" />
-                      <span>
-                        {!todayStatus.hasActiveCheckIn ? 'No Active Check-in' : 'Check Out'}
-                      </span>
+                      <XCircle className="h-5 w-5" />
+                      <span>Check Out</span>
                     </>
                   )}
                 </button>
@@ -481,7 +557,7 @@ const AdminDashboard = () => {
                 </div>
                 <div className="flex justify-between items-center p-3 bg-primary-50 rounded-lg">
                   <span className="text-sm font-medium">Total Working Hours</span>
-                  <span className="font-mono text-primary-600">{getTotalWorkingHours()}</span>
+                  <span className="font-mono text-primary-600">{totalWorkingHours}</span>
                 </div>
               </div>
             </div>
@@ -592,7 +668,7 @@ const AdminDashboard = () => {
                 >
                   <option value="">All Departments</option>
                   {departments.map(dept => (
-                    <option key={dept.id} value={dept.id}>{dept.name}</option>
+                    <option key={dept.id} value={dept.name}>{dept.name}</option>
                   ))}
                 </select>
               </div>
@@ -604,8 +680,25 @@ const AdminDashboard = () => {
                 >
                   <option value="">All Roles</option>
                   {roles.map(role => (
-                    <option key={role.id} value={role.id}>{role.name}</option>
+                    <option key={role.id} value={role.name}>{role.name}</option>
                   ))}
+                </select>
+              </div>
+              <div>
+                <select
+                  value={filterManager}
+                  onChange={(e) => setFilterManager(e.target.value)}
+                  className="input-field w-full"
+                >
+                  <option value="">All Managers</option>
+                  <option value="none">No Manager (Self-reporting)</option>
+                  {employees
+                    .filter(emp => emp.role_name === 'Manager' || emp.roleName === 'Manager' || emp.role_id === 4 || emp.roleId === 4)
+                    .map(employee => (
+                      <option key={employee.emp_id || employee.empId || employee.id} value={employee.emp_id || employee.empId || employee.id}>
+                        {employee.first_name || employee.firstName} {employee.last_name || employee.lastName}
+                      </option>
+                    ))}
                 </select>
               </div>
               <div className="flex space-x-2">
@@ -614,6 +707,7 @@ const AdminDashboard = () => {
                     setSearchTerm('');
                     setFilterDept('');
                     setFilterRole('');
+                    setFilterManager('');
                   }}
                   className="btn-secondary px-4 py-2"
                 >
@@ -631,6 +725,7 @@ const AdminDashboard = () => {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Department</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reporting To</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
@@ -656,10 +751,15 @@ const AdminDashboard = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{employee.email}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {getDepartmentName(employee.dept_id || employee.deptId)}
+                        {employee.dept_name || employee.deptName || getDepartmentName(employee.dept_id || employee.deptId)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {getRoleName(employee.role_id || employee.roleId)}
+                        {employee.role_name || employee.roleName || getRoleName(employee.role_id || employee.roleId)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <span className={(employee.reporting_to || employee.reportingTo) ? 'text-sm' : 'text-gray-400 text-xs'}>
+                          {getManagerName(employee.reporting_to || employee.reportingTo)}
+                        </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <div className="flex space-x-2">
@@ -770,12 +870,12 @@ const AdminDashboard = () => {
                   <select
                     required
                     className="input-field"
-                    value={employeeForm.role_id}
-                    onChange={(e) => setEmployeeForm({ ...employeeForm, role_id: e.target.value })}
+                    value={employeeForm.role_name}
+                    onChange={(e) => setEmployeeForm({ ...employeeForm, role_name: e.target.value })}
                   >
                     <option value="">Select Role</option>
                     {roles.map(role => (
-                      <option key={role.id} value={role.id}>{role.name}</option>
+                      <option key={role.id} value={role.name}>{role.name}</option>
                     ))}
                   </select>
                 </div>
@@ -784,15 +884,52 @@ const AdminDashboard = () => {
                   <select
                     required
                     className="input-field"
-                    value={employeeForm.dept_id}
-                    onChange={(e) => setEmployeeForm({ ...employeeForm, dept_id: e.target.value })}
+                    value={employeeForm.dept_name}
+                    onChange={(e) => setEmployeeForm({ ...employeeForm, dept_name: e.target.value })}
                   >
                     <option value="">Select Department</option>
                     {departments.map(dept => (
-                      <option key={dept.id} value={dept.id}>{dept.name}</option>
+                      <option key={dept.id} value={dept.name}>{dept.name}</option>
                     ))}
                   </select>
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Reporting Manager
+                  {employeeForm.role_name && !['Manager', 'Admin'].includes(employeeForm.role_name) && (
+                    <span className="text-red-500 ml-1">*</span>
+                  )}
+                </label>
+                <select
+                  className="input-field"
+                  required={employeeForm.role_name && !['Manager', 'Admin'].includes(employeeForm.role_name)}
+                  value={employeeForm.reporting_to || ''}
+                  onChange={(e) => {
+                    const value = e.target.value === '' ? null : e.target.value;
+                    setEmployeeForm({ ...employeeForm, reporting_to: value });
+                  }}
+                >
+                  {['Manager', 'Admin'].includes(employeeForm.role_name) && (
+                    <option value="">No Manager (Self-reporting)</option>
+                  )}
+                  {employees
+                    .filter(emp => !editingEmployee || emp.email !== editingEmployee.email) // Exclude current employee when editing
+                    .filter(emp => {
+                      // Only show managers and admins as potential managers
+                      const empRole = emp.role_name || emp.roleName || getRoleName(emp.role_id || emp.roleId);
+                      return ['Manager', 'Admin'].includes(empRole);
+                    })
+                    .map(employee => (
+                      <option key={employee.emp_id || employee.empId || employee.id} value={employee.emp_id || employee.empId || employee.id}>
+                        {employee.first_name || employee.firstName} {employee.last_name || employee.lastName} ({employee.email}) - {employee.role_name || employee.roleName || getRoleName(employee.role_id || employee.roleId)}
+                      </option>
+                    ))}
+                </select>
+                {employeeForm.role_name && !['Manager', 'Admin'].includes(employeeForm.role_name) && (
+                  <p className="text-sm text-gray-500 mt-1">Regular employees must have a reporting manager</p>
+                )}
               </div>
 
               <div className="flex space-x-3 pt-4">
